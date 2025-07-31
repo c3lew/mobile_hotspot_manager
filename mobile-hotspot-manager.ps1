@@ -185,12 +185,54 @@ function Get-HotspotStatus {
     }
 }
 
+function Ensure-HotspotProfile {
+    <#
+        .SYNOPSIS
+        Create a default hosted network profile if one does not already exist.
+
+        .DESCRIPTION
+        Some systems do not have a hosted network profile until the mobile
+        hotspot feature has been enabled for the first time. This helper
+        creates a basic profile using `netsh` so that the Windows Runtime APIs
+        can start the hotspot successfully.
+    #>
+    param(
+        [string]$DefaultSsid = "PowerShellHotspot",
+        [string]$DefaultKey  = "P@ssw0rd1!"
+    )
+
+    try {
+        Write-Log -Message "Checking for existing hotspot profile..." -Level "INFO"
+        $hostedInfo = netsh wlan show hostednetwork
+        if ($hostedInfo -match "not\s+configured") {
+            Write-Log -Message "No hotspot profile found. Creating default profile..." -Level "WARNING"
+            netsh wlan set hostednetwork mode=allow ssid=$DefaultSsid key=$DefaultKey | Out-Null
+            Write-Log -Message "Default hotspot profile created with SSID '$DefaultSsid'" -Level "SUCCESS"
+        }
+        else {
+            Write-Log -Message "Hotspot profile already configured" -Level "INFO"
+        }
+
+        return $true
+    }
+    catch {
+        Write-Log -Message "Failed to ensure hotspot profile: $($_.Exception.Message)" -Level "ERROR"
+        $Script:ErrorCount++
+        return $false
+    }
+}
+
 function Enable-MobileHotspot {
     try {
         Write-Log -Message "Attempting to enable mobile hotspot..." -Level "INFO"
         
         $tetheringManager = Get-TetheringManager
         if ($null -eq $tetheringManager) {
+            return $false
+        }
+
+        # Ensure a hosted network profile exists before starting
+        if (-not (Ensure-HotspotProfile)) {
             return $false
         }
         
