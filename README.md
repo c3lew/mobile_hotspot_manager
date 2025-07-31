@@ -27,4 +27,21 @@ Run the PowerShell script with the desired action:
 ./mobile-hotspot-manager.ps1 -Action GetHotspot
 ```
 
+**Note:** Enabling or disabling the hotspot requires administrative privileges.
+Run PowerShell or the provided batch file as *Administrator* for these
+operations to succeed.
+
 You can also run `run-hotspot-manager.bat` for an interactive menu.
+
+## Troubleshooting
+
+If you run the script with administrative privileges and receive an error such as:
+
+```
+Failed to get tethering manager: Element not found. (Exception from HRESULT: 0x80070490)
+```
+
+The current network adapter may not support mobile hotspot, or there might not be an active
+internet connection profile. Ensure you are connected to the internet and, if possible,
+try connecting via Wi‑Fi before running the script. Some devices do not expose the
+Windows Runtime tethering APIs and therefore cannot be managed by this tool.
