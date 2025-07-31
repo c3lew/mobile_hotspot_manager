@@ -11,7 +11,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Enable", "Disable", "Status", "Toggle", "GetWiFi", "Help")]
+    [ValidateSet("Enable", "Disable", "Status", "Toggle", "GetWiFi", "GetHotspot", "Help")]
     [string]$Action = "Help",
     
     [Parameter(Mandatory=$false)]
@@ -190,6 +190,10 @@ function Enable-MobileHotspot {
         
         if ($result.Status -eq "Success") {
             Write-Log -Message "Mobile hotspot enabled successfully" -Level "SUCCESS"
+
+            # Display hotspot credentials so the user can connect immediately
+            Show-HotspotCredentials | Out-Null
+
             return $true
         }
         else {
@@ -271,30 +275,73 @@ function Toggle-MobileHotspot {
 # ==============================================================================
 
 function Get-MobileHotspotCredentials {
+    # First try to retrieve credentials using the Windows Runtime APIs. If that
+    # fails (which can happen on some Windows builds that restrict access to
+    # these APIs from PowerShell), fall back to parsing the output of `netsh`.
     try {
-        Write-Log -Message "Retrieving mobile hotspot credentials..." -Level "INFO"
+        Write-Log -Message "Retrieving mobile hotspot credentials via Windows Runtime..." -Level "INFO"
 
         $tetheringManager = Get-TetheringManager
-        if ($null -eq $tetheringManager) {
-            return $null
+        if ($null -ne $tetheringManager) {
+            $config = $tetheringManager.GetCurrentAccessPointConfiguration()
+            $ssid = $config.Ssid
+            $passphrase = $config.Passphrase
+
+            if ($ssid -and $passphrase) {
+                Write-Log -Message "Mobile hotspot credentials obtained" -Level "SUCCESS"
+                return [PSCustomObject]@{
+                    'WiFi Name' = $ssid
+                    'Password'  = $passphrase
+                }
+            }
+        }
+        Write-Log -Message "Windows Runtime method failed, attempting netsh fallback" -Level "WARNING"
+    }
+    catch {
+        Write-Log -Message "Windows Runtime method failed: $($_.Exception.Message)" -Level "WARNING"
+    }
+
+    # Fallback using netsh hostednetwork output
+    try {
+        Write-Log -Message "Retrieving mobile hotspot credentials via netsh..." -Level "INFO"
+
+        $ssidOutput = netsh wlan show hostednetwork
+        $secOutput = netsh wlan show hostednetwork setting=security
+
+        $ssid = $null
+        $passphrase = $null
+
+        foreach ($line in $ssidOutput) {
+            if ($line -match "SSID name\s*:\s*\"?(.+?)\"?$") {
+                $ssid = $matches[1].Trim()
+                break
+            }
         }
 
-        $config = $tetheringManager.GetCurrentAccessPointConfiguration()
-        $ssid = $config.Ssid
-        $passphrase = $config.Passphrase
+        foreach ($line in $secOutput) {
+            if ($line -match "(User security key|Key Content)\s*:\s*(.+)") {
+                $passphrase = $matches[2].Trim()
+                break
+            }
+        }
 
-        Write-Log -Message "Mobile hotspot credentials obtained" -Level "SUCCESS"
-
-        return [PSCustomObject]@{
-            'WiFi Name' = $ssid
-            'Password'  = $passphrase
+        if ($ssid -or $passphrase) {
+            Write-Log -Message "Mobile hotspot credentials obtained" -Level "SUCCESS"
+            return [PSCustomObject]@{
+                'WiFi Name' = $ssid
+                'Password'  = $passphrase
+            }
+        }
+        else {
+            Write-Log -Message "Mobile hotspot credentials not found via netsh" -Level "ERROR"
         }
     }
     catch {
-        Write-Log -Message "Failed to get mobile hotspot credentials: $($_.Exception.Message)" -Level "ERROR"
+        Write-Log -Message "Failed to get mobile hotspot credentials via netsh: $($_.Exception.Message)" -Level "ERROR"
         $Script:ErrorCount++
-        return $null
     }
+
+    return $null
 }
 
 function Get-WiFiProfiles {
@@ -341,6 +388,31 @@ function Get-WiFiPassword {
     catch {
         Write-Log -Message "Failed to get password for profile '$ProfileName': $($_.Exception.Message)" -Level "ERROR"
         return "Error"
+    }
+}
+
+function Show-HotspotCredentials {
+    try {
+        Write-Log -Message "Retrieving mobile hotspot credentials..." -Level "INFO"
+
+        $cred = Get-MobileHotspotCredentials
+        if ($null -eq $cred) {
+            Write-Log -Message "Hotspot credentials could not be retrieved" -Level "ERROR"
+            return
+        }
+
+        Write-Log -Message "Hotspot Credentials:" -Level "SUCCESS"
+        $cred | Format-Table -AutoSize | Out-String | ForEach-Object {
+            $_.Trim() -split "`n" | ForEach-Object {
+                if ($_.Trim()) { Write-Log -Message $_ -Level "INFO" }
+            }
+        }
+
+        return $cred
+    }
+    catch {
+        Write-Log -Message "Failed to show hotspot credentials: $($_.Exception.Message)" -Level "ERROR"
+        $Script:ErrorCount++
     }
 }
 
@@ -421,6 +493,7 @@ ACTIONS:
     Toggle      Toggle hotspot state (on->off or off->on)
     Status      Show current hotspot status
     GetWiFi     Retrieve all saved WiFi credentials
+    GetHotspot  Show only the current hotspot SSID and password
     Help        Show this help message
 
 PARAMETERS:
@@ -431,6 +504,7 @@ EXAMPLES:
     .\mobile-hotspot-manager.ps1 -Action Enable
     .\mobile-hotspot-manager.ps1 -Action Status
     .\mobile-hotspot-manager.ps1 -Action GetWiFi
+    .\mobile-hotspot-manager.ps1 -Action GetHotspot
     .\mobile-hotspot-manager.ps1 -Action Toggle -Quiet
 
 REQUIREMENTS:
@@ -553,6 +627,10 @@ function Main {
             
             "GetWiFi" {
                 Show-WiFiCredentials
+            }
+
+            "GetHotspot" {
+                Show-HotspotCredentials
             }
             
             default {
