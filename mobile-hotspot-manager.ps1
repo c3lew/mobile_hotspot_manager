@@ -270,6 +270,33 @@ function Toggle-MobileHotspot {
 # WIFI CREDENTIAL FUNCTIONS
 # ==============================================================================
 
+function Get-MobileHotspotCredentials {
+    try {
+        Write-Log -Message "Retrieving mobile hotspot credentials..." -Level "INFO"
+
+        $tetheringManager = Get-TetheringManager
+        if ($null -eq $tetheringManager) {
+            return $null
+        }
+
+        $config = $tetheringManager.GetCurrentAccessPointConfiguration()
+        $ssid = $config.Ssid
+        $passphrase = $config.Passphrase
+
+        Write-Log -Message "Mobile hotspot credentials obtained" -Level "SUCCESS"
+
+        return [PSCustomObject]@{
+            'WiFi Name' = $ssid
+            'Password'  = $passphrase
+        }
+    }
+    catch {
+        Write-Log -Message "Failed to get mobile hotspot credentials: $($_.Exception.Message)" -Level "ERROR"
+        $Script:ErrorCount++
+        return $null
+    }
+}
+
 function Get-WiFiProfiles {
     try {
         Write-Log -Message "Retrieving WiFi profiles..." -Level "INFO"
@@ -320,16 +347,22 @@ function Get-WiFiPassword {
 function Show-WiFiCredentials {
     try {
         Write-Log -Message "Retrieving all WiFi credentials..." -Level "INFO"
-        
+
         $profiles = Get-WiFiProfiles
-        
+
         if ($profiles.Count -eq 0) {
             Write-Log -Message "No WiFi profiles found" -Level "WARNING"
             return
         }
-        
+
         $credentials = @()
-        
+
+        # Include mobile hotspot credentials if available
+        $hotspotCred = Get-MobileHotspotCredentials
+        if ($null -ne $hotspotCred) {
+            $credentials += $hotspotCred
+        }
+
         foreach ($profile in $profiles) {
             $password = Get-WiFiPassword -ProfileName $profile
             $credentials += [PSCustomObject]@{
@@ -468,12 +501,10 @@ function Main {
             return
         }
         
-        # Initialize hotspot manager (not needed for WiFi operations)
-        if ($Action -ne "GetWiFi") {
-            if (-not (Initialize-HotspotManager)) {
-                Write-Log -Message "Failed to initialize hotspot manager. Exiting." -Level "ERROR"
-                return
-            }
+        # Initialize hotspot manager (required for hotspot operations and hotspot credentials)
+        if (-not (Initialize-HotspotManager)) {
+            Write-Log -Message "Failed to initialize hotspot manager. Exiting." -Level "ERROR"
+            return
         }
         
         # Execute requested action
