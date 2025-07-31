@@ -29,11 +29,10 @@ echo 2. Disable Mobile Hotspot
 echo 3. Toggle Hotspot (On/Off)
 echo 4. Check Hotspot Status
 echo 5. Get WiFi Passwords
-echo 6. Show Hotspot Credentials
-echo 7. Show Help
-echo 8. Exit
+echo 6. Show Help
+echo 7. Exit
 echo.
-set /p "choice=Enter your choice (1-8): "
+set /p "choice=Enter your choice (1-7): "
 
 :: Process choice
 if "%choice%"=="1" goto ENABLE
@@ -41,9 +40,8 @@ if "%choice%"=="2" goto DISABLE
 if "%choice%"=="3" goto TOGGLE
 if "%choice%"=="4" goto STATUS
 if "%choice%"=="5" goto GETWIFI
-if "%choice%"=="6" goto GETHOTSPOT
-if "%choice%"=="7" goto HELP
-if "%choice%"=="8" goto EXIT
+if "%choice%"=="6" goto HELP
+if "%choice%"=="7" goto EXIT
 echo Invalid choice. Please try again.
 echo.
 goto MENU
@@ -78,12 +76,6 @@ echo Retrieving WiFi Passwords...
 powershell.exe -ExecutionPolicy Bypass -File "%~dp0mobile-hotspot-manager.ps1" -Action GetWiFi
 echo.
 echo WiFi credentials have been saved to a CSV file in the current directory.
-goto CONTINUE
-
-:GETHOTSPOT
-echo.
-echo Displaying Hotspot Credentials...
-powershell.exe -ExecutionPolicy Bypass -File "%~dp0mobile-hotspot-manager.ps1" -Action GetHotspot
 goto CONTINUE
 
 :HELP
