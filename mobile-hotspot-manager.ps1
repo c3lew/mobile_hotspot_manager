@@ -312,7 +312,7 @@ function Get-MobileHotspotCredentials {
         $passphrase = $null
 
         foreach ($line in $ssidOutput) {
-            if ($line -match "SSID name\s*:\s*\"?(.+?)\"?$") {
+            if ($line -match 'SSID name\s*:\s*"?(.*?)"?$') {
                 $ssid = $matches[1].Trim()
                 break
             }
