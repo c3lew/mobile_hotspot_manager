@@ -271,30 +271,73 @@ function Toggle-MobileHotspot {
 # ==============================================================================
 
 function Get-MobileHotspotCredentials {
+    # First try to retrieve credentials using the Windows Runtime APIs. If that
+    # fails (which can happen on some Windows builds that restrict access to
+    # these APIs from PowerShell), fall back to parsing the output of `netsh`.
     try {
-        Write-Log -Message "Retrieving mobile hotspot credentials..." -Level "INFO"
+        Write-Log -Message "Retrieving mobile hotspot credentials via Windows Runtime..." -Level "INFO"
 
         $tetheringManager = Get-TetheringManager
-        if ($null -eq $tetheringManager) {
-            return $null
+        if ($null -ne $tetheringManager) {
+            $config = $tetheringManager.GetCurrentAccessPointConfiguration()
+            $ssid = $config.Ssid
+            $passphrase = $config.Passphrase
+
+            if ($ssid -and $passphrase) {
+                Write-Log -Message "Mobile hotspot credentials obtained" -Level "SUCCESS"
+                return [PSCustomObject]@{
+                    'WiFi Name' = $ssid
+                    'Password'  = $passphrase
+                }
+            }
+        }
+        Write-Log -Message "Windows Runtime method failed, attempting netsh fallback" -Level "WARNING"
+    }
+    catch {
+        Write-Log -Message "Windows Runtime method failed: $($_.Exception.Message)" -Level "WARNING"
+    }
+
+    # Fallback using netsh hostednetwork output
+    try {
+        Write-Log -Message "Retrieving mobile hotspot credentials via netsh..." -Level "INFO"
+
+        $ssidOutput = netsh wlan show hostednetwork
+        $secOutput = netsh wlan show hostednetwork setting=security
+
+        $ssid = $null
+        $passphrase = $null
+
+        foreach ($line in $ssidOutput) {
+            if ($line -match "SSID name\s*:\s*\"?(.+?)\"?$") {
+                $ssid = $matches[1].Trim()
+                break
+            }
         }
 
-        $config = $tetheringManager.GetCurrentAccessPointConfiguration()
-        $ssid = $config.Ssid
-        $passphrase = $config.Passphrase
+        foreach ($line in $secOutput) {
+            if ($line -match "(User security key|Key Content)\s*:\s*(.+)") {
+                $passphrase = $matches[2].Trim()
+                break
+            }
+        }
 
-        Write-Log -Message "Mobile hotspot credentials obtained" -Level "SUCCESS"
-
-        return [PSCustomObject]@{
-            'WiFi Name' = $ssid
-            'Password'  = $passphrase
+        if ($ssid -or $passphrase) {
+            Write-Log -Message "Mobile hotspot credentials obtained" -Level "SUCCESS"
+            return [PSCustomObject]@{
+                'WiFi Name' = $ssid
+                'Password'  = $passphrase
+            }
+        }
+        else {
+            Write-Log -Message "Mobile hotspot credentials not found via netsh" -Level "ERROR"
         }
     }
     catch {
-        Write-Log -Message "Failed to get mobile hotspot credentials: $($_.Exception.Message)" -Level "ERROR"
+        Write-Log -Message "Failed to get mobile hotspot credentials via netsh: $($_.Exception.Message)" -Level "ERROR"
         $Script:ErrorCount++
-        return $null
     }
+
+    return $null
 }
 
 function Get-WiFiProfiles {
