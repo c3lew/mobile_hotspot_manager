@@ -129,19 +129,35 @@ function Wait-AsyncOperation {
 function Get-TetheringManager {
     try {
         Write-Log -Message "Getting tethering manager..." -Level "INFO"
-        
+
+        # Try the active internet connection profile first
+        $profiles = @()
         $connectionProfile = [Windows.Networking.Connectivity.NetworkInformation,Windows.Networking.Connectivity,ContentType=WindowsRuntime]::GetInternetConnectionProfile()
-        
-        if ($null -eq $connectionProfile) {
-            Write-Log -Message "No internet connection profile found. Make sure you have an active internet connection." -Level "ERROR"
-            $Script:ErrorCount++
-            return $null
+        if ($null -ne $connectionProfile) {
+            $profiles += $connectionProfile
         }
-        
-        $tetheringManager = [Windows.Networking.NetworkOperators.NetworkOperatorTetheringManager,Windows.Networking.NetworkOperators,ContentType=WindowsRuntime]::CreateFromConnectionProfile($connectionProfile)
-        
-        Write-Log -Message "Tethering manager obtained successfully" -Level "SUCCESS"
-        return $tetheringManager
+
+        # Append all connection profiles as fallbacks
+        $allProfiles = [Windows.Networking.Connectivity.NetworkInformation,Windows.Networking.Connectivity,ContentType=WindowsRuntime]::GetConnectionProfiles()
+        $profiles += $allProfiles
+
+        foreach ($profile in $profiles) {
+            try {
+                $tetheringManager = [Windows.Networking.NetworkOperators.NetworkOperatorTetheringManager,Windows.Networking.NetworkOperators,ContentType=WindowsRuntime]::CreateFromConnectionProfile($profile)
+                if ($null -ne $tetheringManager) {
+                    Write-Log -Message "Tethering manager obtained successfully" -Level "SUCCESS"
+                    return $tetheringManager
+                }
+            }
+            catch {
+                # Ignore profiles that do not support tethering
+                continue
+            }
+        }
+
+        Write-Log -Message "No suitable connection profile found for tethering." -Level "ERROR"
+        $Script:ErrorCount++
+        return $null
     }
     catch {
         Write-Log -Message "Failed to get tethering manager: $($_.Exception.Message)" -Level "ERROR"
@@ -547,7 +563,9 @@ function Test-Prerequisites {
     $isAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     
     if (-not $isAdmin) {
-        Write-Log -Message "Warning: Not running as Administrator. Some operations may fail." -Level "WARNING"
+        Write-Log -Message "Administrator privileges are required. Please run PowerShell as Administrator." -Level "ERROR"
+        $Script:ErrorCount++
+        return $false
     }
     
     Write-Log -Message "Prerequisites check completed" -Level "SUCCESS"
