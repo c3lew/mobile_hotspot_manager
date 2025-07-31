@@ -8,6 +8,7 @@ This repository contains a PowerShell script (`mobile-hotspot-manager.ps1`) and 
 - Display current hotspot status
 - Retrieve saved Wi‑Fi profiles and passwords
 - Obtain the current mobile hotspot SSID and password
+- Show the hotspot credentials directly without listing other Wi‑Fi profiles
 
 The PowerShell script uses Windows Runtime APIs when possible and falls back to parsing `netsh` output if those APIs are unavailable. All operations are logged to a file named `MobileHotspot_<date>.log` in the script directory. Wi‑Fi credentials retrieved via the `GetWiFi` action are also exported to a timestamped CSV file.
 
@@ -21,6 +22,9 @@ Run the PowerShell script with the desired action:
 
 # Retrieve all Wi‑Fi credentials (including hotspot)
 ./mobile-hotspot-manager.ps1 -Action GetWiFi
+
+# Show just the current hotspot name and password
+./mobile-hotspot-manager.ps1 -Action GetHotspot
 ```
 
 You can also run `run-hotspot-manager.bat` for an interactive menu.

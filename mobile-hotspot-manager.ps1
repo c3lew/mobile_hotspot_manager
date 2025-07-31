@@ -11,7 +11,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$false)]
-    [ValidateSet("Enable", "Disable", "Status", "Toggle", "GetWiFi", "Help")]
+    [ValidateSet("Enable", "Disable", "Status", "Toggle", "GetWiFi", "GetHotspot", "Help")]
     [string]$Action = "Help",
     
     [Parameter(Mandatory=$false)]
@@ -190,6 +190,10 @@ function Enable-MobileHotspot {
         
         if ($result.Status -eq "Success") {
             Write-Log -Message "Mobile hotspot enabled successfully" -Level "SUCCESS"
+
+            # Display hotspot credentials so the user can connect immediately
+            Show-HotspotCredentials | Out-Null
+
             return $true
         }
         else {
@@ -387,6 +391,31 @@ function Get-WiFiPassword {
     }
 }
 
+function Show-HotspotCredentials {
+    try {
+        Write-Log -Message "Retrieving mobile hotspot credentials..." -Level "INFO"
+
+        $cred = Get-MobileHotspotCredentials
+        if ($null -eq $cred) {
+            Write-Log -Message "Hotspot credentials could not be retrieved" -Level "ERROR"
+            return
+        }
+
+        Write-Log -Message "Hotspot Credentials:" -Level "SUCCESS"
+        $cred | Format-Table -AutoSize | Out-String | ForEach-Object {
+            $_.Trim() -split "`n" | ForEach-Object {
+                if ($_.Trim()) { Write-Log -Message $_ -Level "INFO" }
+            }
+        }
+
+        return $cred
+    }
+    catch {
+        Write-Log -Message "Failed to show hotspot credentials: $($_.Exception.Message)" -Level "ERROR"
+        $Script:ErrorCount++
+    }
+}
+
 function Show-WiFiCredentials {
     try {
         Write-Log -Message "Retrieving all WiFi credentials..." -Level "INFO"
@@ -464,6 +493,7 @@ ACTIONS:
     Toggle      Toggle hotspot state (on->off or off->on)
     Status      Show current hotspot status
     GetWiFi     Retrieve all saved WiFi credentials
+    GetHotspot  Show only the current hotspot SSID and password
     Help        Show this help message
 
 PARAMETERS:
@@ -474,6 +504,7 @@ EXAMPLES:
     .\mobile-hotspot-manager.ps1 -Action Enable
     .\mobile-hotspot-manager.ps1 -Action Status
     .\mobile-hotspot-manager.ps1 -Action GetWiFi
+    .\mobile-hotspot-manager.ps1 -Action GetHotspot
     .\mobile-hotspot-manager.ps1 -Action Toggle -Quiet
 
 REQUIREMENTS:
@@ -596,6 +627,10 @@ function Main {
             
             "GetWiFi" {
                 Show-WiFiCredentials
+            }
+
+            "GetHotspot" {
+                Show-HotspotCredentials
             }
             
             default {
